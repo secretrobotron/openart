@@ -1,4 +1,4 @@
-var tumblr = require('tumblr');
+var tumblr = require('tumblr.js');
 var habitat = require('habitat');
 var express = require('express');
 
@@ -7,13 +7,9 @@ habitat.load();
 var env = new habitat();
 var app = express();
 
-var oauth = env.get('OAUTH');
-Object.keys(oauth).forEach(function (key) {
-  oauth[key.toLowerCase().substr(5)] = oauth[key];
-  delete oauth[key];
-});
+var oauthConfig = env.get('OAUTH');
 
-console.log(oauth);
+var tumblrClient = tumblr.createClient(oauthConfig);
 
 app.listen(env.get('PORT'), function(){
   console.log('Express server listening on ' + env.get('HOSTNAME'));

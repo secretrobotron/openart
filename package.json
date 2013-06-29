@@ -10,8 +10,9 @@
   "author": "",
   "license": "MPL2",
   "devDependencies": {
-    "tumblr": "~0.2.1",
     "habitat": "~0.4.2",
-    "express": "~3.3.1"
+    "express": "~3.3.1",
+    "needle": "~0.5.1",
+    "tumblr.js": "0.0.4"
   }
 }
