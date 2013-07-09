@@ -1,17 +1,12 @@
 var express = require('express');
-var knox = require('knox');
 var habitat = require('habitat');
 var os = require('os');
-var path = require('path');
-var shortid = require('shortid');
-var nunjucks = require('nunjucks');
-var fs = require('fs');
-var Bitly = require('bitly');
+var mongoose = require('mongoose');
+var Feed = require('feed');
 
 habitat.load();
 
 var env = new habitat();
-var s3 = env.get('S3');
 
 var express = require('express');
 var app = express();
@@ -21,13 +16,50 @@ var hostname = env.get('HOSTNAME') || os.hostname();
 var allowedDomains = (env.get('ALLOWED_DOMAINS') || '').split(' ');
 var allowedIPs = (env.get('ALLOWED_IPS') || '').split(' ');
 
-var knoxClient = knox.createClient({
-  key: s3.key,
-  secret: s3.secret,
-  bucket: s3.bucket
+app.use(express.bodyParser());
+
+mongoose.connect(env.get('DB_URL'));
+
+var Item = mongoose.model('Item', {
+  url: String,
+  description: String,
+  date: Date,
+  title: String,
+  image: String,
+  author: String
 });
 
-app.use(express.bodyParser());
+var feedConfig = env.get('FEED');
+
+var feed = new Feed({
+  title: feedConfig.title,
+  description: feedConfig.description,
+  link: feedConfig.url,
+  image: feedConfig.image,
+  author: {
+    name: feedConfig.author_name || '',
+    link: feedConfig.author_link || '',
+    email: feedConfig.author_email || ''
+  }
+});
+
+var rssOutputString, atomOutputString;
+
+function addItemToFeed (item) {
+  feed.item({
+    title: item.title || '',
+    description: item.description || '',
+    link: item.url || '',
+    author: [{
+      name: item.author || ''
+    }],
+    date: item.date,
+    image: item.image || ''
+  });
+
+  rssOutputString = feed.render('rss-2.0');
+  atomOutputString = feed.render('atom-1.0');
+}
 
 function allowCorsRequests (req, resp, next) {
   var origin = req.get('origin'); // TODO: Check if this is spoof-proof
@@ -48,27 +80,13 @@ function allowCorsRequests (req, resp, next) {
 
 app.use(allowCorsRequests);
 
-function sendKnoxHTMLRequest (filename, data, callback) {
-  var knoxReq = knoxClient.put(filename, {
-    'x-amz-acl': 'public-read',
-    'Content-Length': Buffer.byteLength(data, 'utf8'),
-    'Content-Type': 'text/html'
-  });
+app.get(feedConfig.rss_path, function (req, res) {
+  res.send(rssOutputString, 200);
+});
 
-  knoxReq.on('response', callback);
-
-  knoxReq.end(data);
-}
-
-var bitlyConfig = env.get('BITLY');
-var bitly = new Bitly(bitlyConfig.user, bitlyConfig.key);
-
-var nunjucksEnv = new nunjucks.Environment(new nunjucks.FileSystemLoader(path.join(__dirname, '../examples')));
-nunjucksEnv.express(app);
-
-var publishUrl = 'http://' + s3.bucket + '.s3.amazonaws.com'
-
-app.use(express.static(path.join(__dirname, '../')));
+app.get(feedConfig.atom_path, function (req, res) {
+  res.send(atomOutputString, 200);
+});
 
 app.post('/post', function (req, res) {
   if (allowedIPs.indexOf(req.connection.remoteAddress) === -1) {
@@ -76,31 +94,50 @@ app.post('/post', function (req, res) {
     return;
   }
 
-  var inputData = req.body.data;
+  var url = req.body.url;
+  var image = req.body.image || '';
+  var description = req.body.description || '';
+  var title = req.body.title || description;
+  var author = req.body.author || 'anonymous';
 
-  if (!inputData) {
+  if (!(url)) {
     res.send('No.', 500);
     return;
   }
 
-  var filename = shortid.generate();
-  var longUrl = 'http://s3.amazonaws.com/' + s3.bucket + '/' + filename;
+  var item = new Item({
+    url: url,
+    description: description,
+    title: title,
+    author: author,
+    image: image,
+    date: Date.now()
+  });
 
-  sendKnoxHTMLRequest(filename, inputData, function (knoxRes) {
-    if (200 == knoxRes.statusCode) {
-      bitly.shorten(longUrl, function(err, response) {
-        var url = (err || response.status_code !== 200) ? longUrl : response.data.url;
-        res.json({url: url}, 200);
-      });
+  item.save(function (err, doc) {
+    var json = {status: 'ok'};
+    var code = 200;
+
+    if (err) {
+      json.status = 'error';
+      json.error = err;
+      code = 500;
     }
     else {
-      res.json({error: 'Couldn\'t save to S3'}, 500);
+      addItemToFeed(doc);
     }
+
+    res.json(json, code);
   });
+
 });
 
 app.use(express.logger("dev"));
 
 var server = app.listen(port, function(){
   console.log('Express server listening on ' + server.address().address + ':' + server.address().port);
+});
+
+Item.find({}).sort('-date').execFind(function (err, data) {
+  data.forEach(addItemToFeed);
 });
