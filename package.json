@@ -1,18 +1,17 @@
 {
   "name": "openart",
   "version": "0.0.0",
-  "description": "",
+  "description": "openart server",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
   "repository": "",
   "author": "",
   "license": "MPL2",
-  "devDependencies": {
+  "dependencies": {
     "habitat": "~0.4.2",
     "express": "~3.3.1",
-    "needle": "~0.5.1",
-    "tumblr.js": "0.0.4"
+    "tumblr.js": "0.0.4",
+    "oauth": "~0.9.10",
+    "passport": "~0.1.17",
+    "passport-tumblr": "~0.1.2"
   }
 }
