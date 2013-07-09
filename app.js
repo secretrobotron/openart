@@ -14,7 +14,6 @@ var app = express();
 var port = env.get('PORT');
 var hostname = env.get('HOSTNAME') || os.hostname();
 var allowedDomains = (env.get('ALLOWED_DOMAINS') || '').split(' ');
-var allowedIPs = (env.get('ALLOWED_IPS') || '').split(' ');
 
 app.use(express.bodyParser());
 
@@ -89,11 +88,6 @@ app.get(feedConfig.atom_path, function (req, res) {
 });
 
 app.post('/post', function (req, res) {
-  if (allowedIPs.indexOf(req.connection.remoteAddress) === -1) {
-    res.send('No.', 500);
-    return;
-  }
-
   var url = req.body.url;
   var image = req.body.image || '';
   var description = req.body.description || '';
