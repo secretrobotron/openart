@@ -15,8 +15,6 @@ var port = env.get('PORT');
 var hostname = env.get('HOSTNAME') || os.hostname();
 var allowedDomains = (env.get('ALLOWED_DOMAINS') || '').split(' ');
 
-app.use(express.bodyParser());
-
 mongoose.connect(env.get('DB_URL'));
 
 var Item = mongoose.model('Item', {
@@ -77,7 +75,15 @@ function allowCorsRequests (req, resp, next) {
   next();
 };
 
+app.use(express.bodyParser());
+app.use(express.cookieParser());
+app.use(express.session({secret: env.get('SESSION_SECRET')}));
 app.use(allowCorsRequests);
+app.use(express.csrf());
+
+app.get('/', function (req, res) {
+  res.send(req.session._csrf);
+});
 
 app.get(feedConfig.rss_path, function (req, res) {
   res.send(rssOutputString, 200);
@@ -85,6 +91,26 @@ app.get(feedConfig.rss_path, function (req, res) {
 
 app.get(feedConfig.atom_path, function (req, res) {
   res.send(atomOutputString, 200);
+});
+
+app.get('/test', function (req, res) {
+  res.send('' +
+    '<!DOCTYPE html>\n' +
+    '<html>\n' +
+    '<head><title>test</title></head>\n' +
+    '<body>\n' +
+    '<form action="/post" method="post">\n' +
+    '<input type="hidden" name="_csrf" value="' + req.session._csrf + '">\n' +
+    '<input type="text" name="title" placeholder="title">\n' +
+    '<input type="text" name="description" placeholder="description">\n' +
+    '<input type="text" name="url" placeholder="url">\n' +
+    '<input type="text" name="image" placeholder="image">\n' +
+    '<input type="text" name="author" placeholder="author">\n' +
+    '<input type="submit">\n' +
+    '</form>\n' +
+    '</body>\n' +
+    '</html>\n' +
+    '', 200);
 });
 
 app.post('/post', function (req, res) {
