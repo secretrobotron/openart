@@ -69,9 +69,14 @@ function allowCorsRequests (req, resp, next) {
     if (origin === el) {
       resp.header('Access-Control-Allow-Origin', el);
     }
+    else if (el === '*') {
+      resp.header('Access-Control-Allow-Origin', '*'); 
+    }
   });
-  resp.header('Access-Control-Allow-Methods', 'POST');
-  // Access-Control-Allow-Headers
+
+  resp.header('Access-Control-Allow-Methods', 'GET POST');
+  resp.header('Access-Control-Allow-Headers', 'Content-Type');
+
   next();
 };
 
@@ -79,11 +84,6 @@ app.use(express.bodyParser());
 app.use(express.cookieParser());
 app.use(express.session({secret: env.get('SESSION_SECRET')}));
 app.use(allowCorsRequests);
-app.use(express.csrf());
-
-app.get('/', function (req, res) {
-  res.send(req.session._csrf);
-});
 
 app.get(feedConfig.rss_path, function (req, res) {
   res.send(rssOutputString, 200);
@@ -100,7 +100,6 @@ app.get('/test', function (req, res) {
     '<head><title>test</title></head>\n' +
     '<body>\n' +
     '<form action="/post" method="post">\n' +
-    '<input type="hidden" name="_csrf" value="' + req.session._csrf + '">\n' +
     '<input type="text" name="title" placeholder="title">\n' +
     '<input type="text" name="description" placeholder="description">\n' +
     '<input type="text" name="url" placeholder="url">\n' +
@@ -111,6 +110,10 @@ app.get('/test', function (req, res) {
     '</body>\n' +
     '</html>\n' +
     '', 200);
+});
+
+app.options('/post', function (req, res) {
+  res.send('', 200);
 });
 
 app.post('/post', function (req, res) {
