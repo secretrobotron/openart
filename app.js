@@ -189,6 +189,37 @@ app.post('/post', function (req, res) {
 
 });
 
+app.get('/all/rss', function (req, res) {
+  var tmpFeed = new Feed({
+    title: feedConfig.title,
+    description: feedConfig.description,
+    link: feedConfig.url,
+    image: feedConfig.image,
+    author: {
+      name: feedConfig.author_name || '',
+      link: feedConfig.author_link || '',
+      email: feedConfig.author_email || ''
+    }
+  });
+
+  Item.find({}).sort('-date').execFind(function (err, data) {
+    data.forEach(function(item) {
+      feed.item({
+        title: item.title || '',
+        description: item.description || '',
+        link: item.url || '',
+        author: [{
+          name: item.author || ''
+        }],
+        date: item.date,
+        image: item.image || ''
+      });      
+    });
+    
+    res.send(feed.render('rss-2.0'), 200);
+  });
+});
+
 createFeedAndFillIt();
 
 app.use(express.logger("dev"));
