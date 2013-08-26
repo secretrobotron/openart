@@ -15,6 +15,9 @@ var port = env.get('PORT');
 var hostname = env.get('HOSTNAME') || os.hostname();
 var allowedDomains = (env.get('ALLOWED_DOMAINS') || '').split(' ');
 
+var DATABASE_RETRIEVE_LIMIT = 75;
+var FEED_ITEM_LIMIT = 100;
+
 mongoose.connect(env.get('DB_URL'));
 
 var Item = mongoose.model('Item', {
@@ -28,34 +31,65 @@ var Item = mongoose.model('Item', {
 
 var feedConfig = env.get('FEED');
 
-var feed = new Feed({
-  title: feedConfig.title,
-  description: feedConfig.description,
-  link: feedConfig.url,
-  image: feedConfig.image,
-  author: {
-    name: feedConfig.author_name || '',
-    link: feedConfig.author_link || '',
-    email: feedConfig.author_email || ''
-  }
-});
+var feed;
 
 var rssOutputString, atomOutputString;
 
-function addItemToFeed (item) {
-  feed.item({
-    title: item.title || '',
-    description: item.description || '',
-    link: item.url || '',
-    author: [{
-      name: item.author || ''
-    }],
-    date: item.date,
-    image: item.image || ''
+function createFeed () {
+  return new Feed({
+    title: feedConfig.title,
+    description: feedConfig.description,
+    link: feedConfig.url,
+    image: feedConfig.image,
+    author: {
+      name: feedConfig.author_name || '',
+      link: feedConfig.author_link || '',
+      email: feedConfig.author_email || ''
+    }
   });
+}
 
-  rssOutputString = feed.render('rss-2.0');
-  atomOutputString = feed.render('atom-1.0');
+function retrieveFeedItemsFromDatabase (callback) {
+  Item.find({}).sort('-date').limit(DATABASE_RETRIEVE_LIMIT).execFind(callback);
+}
+
+function createFeedAndFillIt (callback) {
+  feed = createFeed();
+  retrieveFeedItemsFromDatabase(function (err, data) {
+    data.forEach(refreshFeed);
+    callback && callback();
+  });
+}
+
+function refreshFeed (item) {
+
+  function addThisItem () {
+    feed.item({
+      title: item.title || '',
+      description: item.description || '',
+      link: item.url || '',
+      author: [{
+        name: item.author || ''
+      }],
+      date: item.date,
+      image: item.image || ''
+    });
+  }
+
+  function createStrings () {
+    rssOutputString = feed.render('rss-2.0');
+    atomOutputString = feed.render('atom-1.0');
+  }
+
+  if (feed.items.length > FEED_ITEM_LIMIT) {
+    createFeedAndFillIt();
+    createStrings();
+  }
+  else {
+    addThisItem();
+    createStrings();
+  }
+
 }
 
 function allowCorsRequests (req, resp, next) {
@@ -147,7 +181,7 @@ app.post('/post', function (req, res) {
       code = 500;
     }
     else {
-      addItemToFeed(doc);
+      refreshFeed(doc);
     }
 
     res.json(json, code);
@@ -155,12 +189,10 @@ app.post('/post', function (req, res) {
 
 });
 
+createFeedAndFillIt();
+
 app.use(express.logger("dev"));
 
 var server = app.listen(port, function(){
   console.log('Express server listening on ' + server.address().address + ':' + server.address().port);
-});
-
-Item.find({}).sort('-date').execFind(function (err, data) {
-  data.forEach(addItemToFeed);
 });
